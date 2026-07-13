@@ -105,9 +105,13 @@ const candlestickSeries = chart.addSeries(
       wickDownColor: '#ef5350',
     }
 );
-const emaLine = chart.addSeries(
+const emaLine1 = chart.addSeries(
     LightweightCharts.LineSeries,
-    { color: 'blue', lineWidth: 2 }
+    { color: '#38bdf8', lineWidth: 2 }
+);
+const emaLine2 = chart.addSeries(
+    LightweightCharts.LineSeries,
+    { color: '#f59e0b', lineWidth: 2 }
 );
 
 const rsiChart = LightweightCharts.createChart(document.getElementById('rsiChart'),chartOptions2);
@@ -119,24 +123,27 @@ const rsiLine = rsiChart.addSeries(
 let autoUpdateInterval;
 
 // Fetch data function
-function fetchData(ticker, timeframe, emaPeriod, rsiPeriod) {
-    fetch(`/api/data/${ticker}/${timeframe}/${emaPeriod}/${rsiPeriod}`)
+function fetchData(ticker, timeframe, emaPeriod1, emaPeriod2, rsiPeriod) {
+    fetch(`/api/data/${ticker}/${timeframe}/${emaPeriod1}/${emaPeriod2}/${rsiPeriod}`)
         .then(response => response.json())
         .then(data => {
             candlestickSeries.setData(data.candlestick);
-            emaLine.setData(data.ema);
-            rsiLine.setData(data.rsi);
 
-            
+            const emaLines = data.ema || [];
+            const emaMap = Object.fromEntries(emaLines.map(line => [line.period, line.data]));
+            emaLine1.setData(emaMap[emaPeriod1] || []);
+            emaLine2.setData(emaMap[emaPeriod2] || []);
+
+            rsiLine.setData(data.rsi);
         })
         .catch(error => {
             console.error('Error fetching data:', error);
         });
 }
 
-// Fetch NVDA data on page load with default timeframe (daily), EMA period (20) and RSI period (14)
+// Fetch NVDA data on page load with default timeframe (daily), EMA periods (50 and 200) and RSI period (14)
 window.addEventListener('load', () => {
-    fetchData('NVDA', '1d', 20, 14);
+    fetchData('NVDA', '1d', 50, 200, 14);
     loadWatchlist();
 });
 
@@ -144,9 +151,10 @@ window.addEventListener('load', () => {
 document.getElementById('fetchData').addEventListener('click', () => {
     const ticker = document.getElementById('ticker').value;
     const timeframe = document.getElementById('timeframe').value;
-    const emaPeriod = document.getElementById('emaPeriod').value;
+    const emaPeriod1 = document.getElementById('emaPeriod1').value;
+    const emaPeriod2 = document.getElementById('emaPeriod2').value;
     const rsiPeriod = document.getElementById('rsiPeriod').value;
-    fetchData(ticker, timeframe, emaPeriod, rsiPeriod);
+    fetchData(ticker, timeframe, emaPeriod1, emaPeriod2, rsiPeriod);
 });
 
 // Handle auto-update functionality
@@ -156,9 +164,10 @@ document.getElementById('autoUpdate').addEventListener('change', (event) => {
         autoUpdateInterval = setInterval(() => {
             const ticker = document.getElementById('ticker').value;
             const timeframe = document.getElementById('timeframe').value;
-            const emaPeriod = document.getElementById('emaPeriod').value;
+            const emaPeriod1 = document.getElementById('emaPeriod1').value;
+            const emaPeriod2 = document.getElementById('emaPeriod2').value;
             const rsiPeriod = document.getElementById('rsiPeriod').value;
-            fetchData(ticker, timeframe, emaPeriod, rsiPeriod);
+            fetchData(ticker, timeframe, emaPeriod1, emaPeriod2, rsiPeriod);
         }, frequency);
     } else {
         clearInterval(autoUpdateInterval);
@@ -170,6 +179,7 @@ window.addEventListener('resize', () => {
     chart.resize(document.getElementById('chart').clientWidth, document.getElementById('chart').clientHeight);
     rsiChart.resize(document.getElementById('rsiChart').clientWidth, document.getElementById('rsiChart').clientHeight);
 });
+
 
 // Theme toggle functionality for DaisyUI
 document.getElementById('themeToggle').addEventListener('click', () => {
@@ -191,10 +201,10 @@ document.getElementById('themeToggle').addEventListener('click', () => {
             },
             grid: {
                 vertLines: {
-                    color: 'rgba(55, 65, 81, 0.5)',
+                    color: 'rgba(92, 104, 122, 0.5)',
                 },
                 horzLines: {
-                    color: 'rgba(55, 65, 81, 0.5)',
+                    color: 'rgba(93, 104, 122, 0.5)',
                 },
             },
             rightPriceScale: {
@@ -276,6 +286,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
     }
 });
 
+
 // Load watchlist symbols from the server with real quotes
 function loadWatchlist() {
     // Get the watchlist container
@@ -345,6 +356,7 @@ function loadWatchlist() {
                 
                 // Format the data
                 const price = symbolData.price ? symbolData.price.toFixed(2) : 'N/A';
+                const strikePrice = symbolData.strike != null ? symbolData.strike.toFixed(2) : 'N/A';
                 const changePercent = symbolData.change ? symbolData.change.toFixed(2) : 0;
                 const isPositive = changePercent > 0;
                 const changeClass = isPositive ? 'text-success' : (changePercent < 0 ? 'text-error' : 'text-gray-500');
@@ -384,7 +396,13 @@ function loadWatchlist() {
                     });
                     item.classList.add('border-primary', 'border');
                     
-                    fetchData(symbolData.symbol, document.getElementById('timeframe').value, document.getElementById('emaPeriod').value, document.getElementById('rsiPeriod').value);
+                    fetchData(
+                        symbolData.symbol,
+                        document.getElementById('timeframe').value,
+                        document.getElementById('emaPeriod1').value,
+                        document.getElementById('emaPeriod2').value,
+                        document.getElementById('rsiPeriod').value
+                    );
                 });
                 
                 watchlistItems.appendChild(item);
@@ -401,7 +419,7 @@ function loadWatchlist() {
                 });
             });
             
-                        // Add a refresh button at the bottom
+            // Add a refresh button at the bottom
             const refreshButton = document.createElement('button');
             refreshButton.className = 'btn btn-sm btn-ghost gap-2 mt-4 w-full';
             refreshButton.innerHTML = `<i class="fas fa-sync-alt"></i> Refresh Quotes`;

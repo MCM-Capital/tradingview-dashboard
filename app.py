@@ -17,8 +17,18 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize database
 db.init_app(app)
 
-def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
-    ticker = yf.Ticker(ticker)
+YAHOO_SYMBOL_ALIASES = {
+    'SPX': '^GSPC',
+}
+
+
+def normalize_yahoo_symbol(ticker):
+    return YAHOO_SYMBOL_ALIASES.get(ticker.strip().upper(), ticker.strip().upper())
+
+
+def fetch_yahoo_data(ticker, interval, ema_periods=(20, 50), rsi_period=14):
+    yahoo_ticker = normalize_yahoo_symbol(ticker)
+    ticker = yf.Ticker(yahoo_ticker)
 
     end_date = datetime.now()
     if interval in ['1m', '5m']:
@@ -33,7 +43,6 @@ def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
         start_date = end_date - timedelta(days=365*5)
 
     data = ticker.history(start=start_date, end=end_date, interval=interval)
-    data['EMA'] = ta.ema(data['Close'], length=ema_period)
     data['RSI'] = ta.rsi(data['Close'], length=rsi_period)
 
     candlestick_data = [
@@ -47,13 +56,21 @@ def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
         for row in data.itertuples()
     ]
 
-    ema_data = [
-        {
-            'time': int(row.Index.timestamp()),
-            'value': row.EMA
-        }
-        for row in data.itertuples() if not pd.isna(row.EMA)
-    ]
+    ema_series = []
+    for period in ema_periods:
+        ema_values = ta.ema(data['Close'], length=period)
+        data[f'EMA_{period}'] = ema_values
+        ema_series.append({
+            'period': period,
+            'data': [
+                {
+                    'time': int(row.Index.timestamp()),
+                    'value': getattr(row, f'EMA_{period}')
+                }
+                for row in data.itertuples()
+                if not pd.isna(getattr(row, f'EMA_{period}'))
+            ]
+        })
 
     rsi_data = [
         {
@@ -63,15 +80,21 @@ def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
         for row in data.itertuples()
     ]
 
-    return candlestick_data, ema_data, rsi_data
+    return candlestick_data, ema_series, rsi_data
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/api/data/<ticker>/<interval>/<int:ema_period1>/<int:ema_period2>/<int:rsi_period>')
+def get_data(ticker, interval, ema_period1, ema_period2, rsi_period):
+    candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, (ema_period1, ema_period2), rsi_period)
+    return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})
+
+
 @app.route('/api/data/<ticker>/<interval>/<int:ema_period>/<int:rsi_period>')
-def get_data(ticker, interval, ema_period, rsi_period):
-    candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+def get_data_legacy(ticker, interval, ema_period, rsi_period):
+    candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, (ema_period, ema_period), rsi_period)
     return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})
 
 # Create database tables on startup if they don't exist
@@ -98,20 +121,25 @@ def get_symbols():
     try:
         if not symbol_list:
             return jsonify([])
-            
-        symbols_str = ' '.join(symbol_list)
+
+        resolved_symbols = [normalize_yahoo_symbol(symbol.ticker) for symbol in db_symbols]
+        symbols_str = ' '.join(resolved_symbols)
         tickers = yf.Tickers(symbols_str)
         
         symbols_data = []
         for symbol in db_symbols:
             try:
-                ticker_info = tickers.tickers[symbol.ticker].info
+                yahoo_symbol = normalize_yahoo_symbol(symbol.ticker)
+                ticker_obj = tickers.tickers.get(yahoo_symbol) or tickers.tickers.get(symbol.ticker)
+                ticker_info = ticker_obj.info if ticker_obj else {}
+                current_price = ticker_info.get('currentPrice') or ticker_info.get('regularMarketPrice') or ticker_info.get('ask') or 0
                 quote_data = {
                     'id': symbol.id,
                     'symbol': symbol.ticker,
-                    'price': ticker_info.get('currentPrice', 0),
-                    'change': ticker_info.get('regularMarketChangePercent', 0),
+                    'price': current_price,
+                    'change': ticker_info.get('regularMarketChangePercent', ticker_info.get('currentChangePercent', 0)),
                     'name': ticker_info.get('shortName', symbol.ticker),
+                    'strike': ticker_info.get('strike') or current_price,
                 }
                 symbols_data.append(quote_data)
             except Exception as e:
@@ -122,6 +150,7 @@ def get_symbols():
                     'price': 0,
                     'change': 0,
                     'name': symbol.ticker,
+                    'strike': 0,
                 })
                 print(f"Error getting data for {symbol.ticker}: {e}")
         
@@ -130,7 +159,8 @@ def get_symbols():
     except Exception as e:
         print(f"Error fetching quotes: {e}")
         # Fallback to just returning the symbols without data
-        return jsonify([{'id': s.id, 'symbol': s.ticker, 'price': 0, 'change': 0, 'name': s.ticker} for s in db_symbols])
+        return jsonify([{'id': s.id, 'symbol': s.ticker, 'price': 0, 'change': 0, 'name': s.ticker, 'strike': 0} for s in db_symbols])
+
 
 @app.route('/api/symbols', methods=['POST'])
 def add_symbol():
@@ -149,7 +179,8 @@ def add_symbol():
     
     # Validate symbol with yfinance
     try:
-        info = yf.Ticker(ticker).info
+        yahoo_ticker = normalize_yahoo_symbol(ticker)
+        info = yf.Ticker(yahoo_ticker).info
         if 'regularMarketPrice' not in info and 'currentPrice' not in info:
             return jsonify({'error': 'Invalid symbol'}), 400
             

@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.3/dist/full.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
     <script>
         tailwind.config = {
             theme: {
@@ -50,103 +51,13 @@
             },
         }
     </script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            transition: background-color 0.5s ease, color 0.5s ease;
-            overflow: hidden;
-        }
-        
-        .animate-fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        .watchlist {
-            width: 240px;
-            transition: all 0.3s ease;
-            border-left: 1px solid rgba(209, 213, 219, 0.5);
-        }
-        
-        .dark .watchlist {
-            border-left: 1px solid rgba(55, 65, 81, 0.7);
-        }
-        
-        .watchlist-item {
-            padding: 12px;
-            margin: 4px 0;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .watchlist-item:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        
-        .chart-container {
-            transition: height 0.5s ease;
-            position: relative;
-        }
-        
-        .button-shine {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .button-shine::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
-            transform: rotate(45deg);
-            transition: all 0.3s ease;
-            opacity: 0;
-        }
-        
-        .button-shine:hover::after {
-            opacity: 1;
-            transform: rotate(45deg) translate(50%, -50%);
-        }
-        
-        input, select {
-            transition: all 0.2s ease;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.5);
-            border-color: #3b82f6;
-        }
-        
-        /* Symbol removal animation */
-        .animate-fade-out {
-            transition: all 0.3s ease-out;
-        }
-        
-        /* Highlight the active symbol in watchlist */
-        .card.border-primary {
-            border-width: 2px !important;
-            box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.2);
-        }
-    </style>
 </head>
-<body class="min-h-screen animate-fade-in" data-theme="light">
+<body class="min-h-screen animate-fade-in" data-theme="dark">
     <div class="drawer lg:drawer-open">
         <input id="drawer-toggle" type="checkbox" class="drawer-toggle" />
         
         <!-- Page content goes here -->
-        <div class="drawer-content flex flex-col h-screen">
+        <div class="drawer-content flex flex-col min-h-screen">
             <header class="navbar bg-base-100 shadow-md z-10">
                 <div class="flex-none lg:hidden">
                     <label for="drawer-toggle" class="btn btn-square btn-ghost drawer-button">
@@ -157,14 +68,14 @@
                 <div class="flex-1 px-2">
                     <div class="flex items-center gap-3">
                         <i class="fas fa-chart-line text-primary text-2xl"></i>
-                        <h1 class="text-xl font-bold">YahooFinance <span class="text-primary">Charts</span></h1>
+                        <h1 class="text-xl font-bold">Trader<span class="text-primary">Charts</span></h1>
                     </div>
                 </div>
                 
                 <div class="flex-none">
                     <button id="themeToggle" class="btn btn-sm btn-ghost gap-2">
-                        <i class="fas fa-moon dark-icon"></i>
-                        <i class="fas fa-sun light-icon hidden"></i>
+                        <i class="fas fa-moon dark-icon hidden"></i>
+                        <i class="fas fa-sun light-icon"></i>
                         <span class="hidden md:inline">Theme</span>
                     </button>
                 </div>
@@ -205,9 +116,16 @@
                             
                             <div class="form-control">
                                 <label class="label">
-                                    <span class="label-text">EMA Period</span>
+                                    <span class="label-text">EMA 1 Period</span>
                                 </label>
-                                <input type="number" id="emaPeriod" class="input input-bordered w-full max-w-20" value="20" min="1" max="200" />
+                                <input type="number" id="emaPeriod1" class="input input-bordered w-full max-w-20" value="50" min="1" max="200" />
+                            </div>
+
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">EMA 2 Period</span>
+                                </label>
+                                <input type="number" id="emaPeriod2" class="input input-bordered w-full max-w-20" value="200" min="1" max="200" />
                             </div>
                             
                             <div class="form-control">
@@ -256,7 +174,7 @@
                     <h3 class="text-lg font-bold">Watchlist</h3>
                 </div>
                 <!-- Add symbol form will be inserted here by JavaScript -->
-                <div id="watchlistItems" class="flex flex-col gap-2 p-4 overflow-y-auto max-h-[calc(100vh-10rem)]"></div>
+                <div id="watchlistItems" class="flex flex-col gap-2 p-4 overflow-y-auto"></div>
             </div>
         </div>
     </div>
